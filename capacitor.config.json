@@ -1,0 +1,6 @@
+{
+  "appId": "com.vibe.financetracker",
+  "appName": "FinanceTracker",
+  "webDir": "www",
+  "bundledWebRuntime": false
+}
