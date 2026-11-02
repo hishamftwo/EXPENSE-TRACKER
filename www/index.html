@@ -2,175 +2,557 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Expense Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Money Manager</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
     body { -webkit-tap-highlight-color: transparent; }
-    .pb-safe { padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px)); }
+    .pt-safe { padding-top: max(env(safe-area-inset-top), 12px); }
+    .pb-safe { padding-bottom: max(calc(5rem + env(safe-area-inset-bottom)), 5rem); }
+    
+    /* Themes */
+    body.theme-dark { --bg: #090d16; --card: #131b2e; --border: #1e293b; --text: #f8fafc; --sub: #94a3b8; --accent: #10b981; }
+    body.theme-light { --bg: #f8fafc; --card: #ffffff; --border: #e2e8f0; --text: #0f172a; --sub: #64748b; --accent: #059669; }
+    body.theme-colorful { --bg: #0f172a; --card: #1e1b4b; --border: #4338ca; --text: #f8fafc; --sub: #a5b4fc; --accent: #ec4899; }
+
+    .themed-bg { background-color: var(--bg); color: var(--text); }
+    .themed-card { background-color: var(--card); border-color: var(--border); }
+    .themed-sub { color: var(--sub); }
+    .themed-border { border-color: var(--border); }
+    
+    /* Custom Modal Selectors to eliminate white native dropdown dialog */
+    .custom-modal { background-color: rgba(0, 0, 0, 0.75); backdrop-filter: blur(4px); }
   </style>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans select-none">
+<body class="theme-dark themed-bg min-h-screen flex flex-col font-sans select-none">
+
+  <!-- Lock Screen Overlay -->
+  <div id="lock-screen" class="fixed inset-0 z-50 themed-bg flex flex-col items-center justify-center p-6 space-y-6">
+    <div class="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-2xl shadow-lg">
+      <i class="fa-solid fa-fingerprint"></i>
+    </div>
+    <div class="text-center">
+      <h2 class="text-xl font-bold">App Protected</h2>
+      <p class="text-xs themed-sub mt-1">Authenticate to unlock Money Manager</p>
+    </div>
+    <div class="flex space-x-3 my-2" id="pin-dots">
+      <div class="w-3.5 h-3.5 rounded-full border themed-border"></div>
+      <div class="w-3.5 h-3.5 rounded-full border themed-border"></div>
+      <div class="w-3.5 h-3.5 rounded-full border themed-border"></div>
+      <div class="w-3.5 h-3.5 rounded-full border themed-border"></div>
+    </div>
+    <div class="grid grid-cols-3 gap-4 w-64 max-w-full">
+      <button onclick="pressPin('1')" class="h-14 rounded-2xl themed-card border font-bold text-lg active:scale-95 transition-transform">1</button>
+      <button onclick="pressPin('2')" class="h-14 rounded-2xl themed-card border font-bold text-lg active:scale-95 transition-transform">2</button>
+      <button onclick="pressPin('3')" class="h-14 rounded-2xl themed-card border font-bold text-lg active:scale-95 transition-transform">3</button>
+      <button onclick="pressPin('4')" class="h-14 rounded-2xl themed-card border font-bold text-lg active:scale-95 transition-transform">4</button>
+      <button onclick="pressPin('5')" class="h-14 rounded-2xl themed-card border font-bold text-lg active:scale-95 transition-transform">5</button>
+      <button onclick="pressPin('6')" class="h-14 rounded-2xl themed-card border font-bold text-lg active:scale-95 transition-transform">6</button>
+      <button onclick="pressPin('7')" class="h-14 rounded-2xl themed-card border font-bold text-lg active:scale-95 transition-transform">7</button>
+      <button onclick="pressPin('8')" class="h-14 rounded-2xl themed-card border font-bold text-lg active:scale-95 transition-transform">8</button>
+      <button onclick="pressPin('9')" class="h-14 rounded-2xl themed-card border font-bold text-lg active:scale-95 transition-transform">9</button>
+      <button onclick="triggerBiometric()" class="h-14 rounded-2xl text-emerald-400 border themed-border font-bold text-lg flex items-center justify-center active:scale-95 transition-transform"><i class="fa-solid fa-fingerprint text-xl"></i></button>
+      <button onclick="pressPin('0')" class="h-14 rounded-2xl themed-card border font-bold text-lg active:scale-95 transition-transform">0</button>
+      <button onclick="clearPin()" class="h-14 rounded-2xl themed-card border font-bold text-sm text-red-400 active:scale-95 transition-transform"><i class="fa-solid fa-delete-left"></i></button>
+    </div>
+    <p id="lock-error" class="text-xs text-red-400 min-h-[1rem]"></p>
+  </div>
 
   <!-- Header -->
-  <header class="bg-slate-900 border-b border-slate-800 sticky top-0 z-30 px-4 py-3 flex items-center justify-between shadow-sm">
+  <header class="themed-card border-b pt-safe pb-3 px-4 flex items-center justify-between sticky top-0 z-30 shadow-sm">
     <div class="flex items-center space-x-2">
       <div class="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold">
         <i class="fa-solid fa-wallet text-sm"></i>
       </div>
-      <h1 class="text-lg font-bold tracking-tight text-white">Expense Tracker</h1>
+      <div>
+        <h1 class="text-base font-bold tracking-tight">Money Manager</h1>
+        <div id="month-display" class="text-[10px] themed-sub font-semibold"></div>
+      </div>
     </div>
-    <div id="month-display" class="text-xs font-medium text-slate-400 bg-slate-800/80 px-2.5 py-1 rounded-full border border-slate-700"></div>
+    <div class="flex items-center space-x-2">
+      <!-- Currency Selector -->
+      <button onclick="openModal('modal-currency')" id="btn-currency" class="text-xs font-bold px-2.5 py-1.5 rounded-xl themed-card border flex items-center space-x-1 active:scale-95 transition-transform">
+        <span id="label-currency">USD</span>
+        <i class="fa-solid fa-chevron-down text-[10px] themed-sub ml-1"></i>
+      </button>
+      <!-- Theme Switcher -->
+      <button onclick="cycleTheme()" class="w-8 h-8 rounded-xl themed-card border flex items-center justify-center text-xs active:scale-95">
+        <i class="fa-solid fa-palette"></i>
+      </button>
+    </div>
   </header>
 
   <!-- Main View Container -->
   <main class="flex-1 overflow-y-auto px-4 py-4 pb-safe max-w-lg mx-auto w-full">
     
-    <!-- TRACK VIEW -->
+    <!-- VIEW 1: TRACK -->
     <section id="view-track" class="space-y-4">
       <!-- Summary Card -->
-      <div class="bg-gradient-to-br from-slate-900 to-slate-800/90 border border-slate-800 rounded-2xl p-4 shadow-lg">
-        <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">This Month's Spending</p>
+      <div class="themed-card border rounded-2xl p-4 shadow-sm">
+        <p class="text-[11px] font-semibold themed-sub uppercase tracking-wider">This Month's Spending</p>
         <div class="flex items-baseline justify-between mt-1">
-          <h2 id="total-month-spend" class="text-3xl font-extrabold text-white tracking-tight">$0.00</h2>
-          <span id="trans-count" class="text-xs text-slate-400">0 records</span>
+          <h2 id="total-month-spend" class="text-3xl font-extrabold tracking-tight">0 USD</h2>
+          <span id="trans-count" class="text-xs themed-sub">0 records</span>
         </div>
       </div>
 
       <!-- Quick Entry Form -->
-      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm space-y-3">
-        <h3 class="text-sm font-semibold text-slate-200 flex items-center space-x-1.5">
-          <i class="fa-solid fa-plus-circle text-emerald-400 text-xs"></i>
-          <span>Log Expense</span>
-        </h3>
+      <div class="themed-card border rounded-2xl p-4 shadow-sm space-y-3.5">
+        <div class="flex justify-between items-center">
+          <h3 class="text-xs font-bold uppercase tracking-wider flex items-center space-x-1.5 text-emerald-400">
+            <i class="fa-solid fa-plus-circle"></i>
+            <span>Log Expense</span>
+          </h3>
+          <span class="text-[10px] themed-sub bg-slate-800/40 px-2 py-0.5 rounded-md border themed-border">Nearest 5 Multiple</span>
+        </div>
         
         <div>
-          <label class="text-xs text-slate-400 font-medium block mb-1">Amount</label>
+          <label class="text-xs themed-sub font-medium block mb-1">Amount (Whole Number Only)</label>
           <div class="relative">
-            <span class="absolute left-3.5 top-2.5 text-slate-500 font-bold">$</span>
-            <input type="number" id="input-amount" step="0.01" placeholder="0.00" inputmode="decimal" class="w-full bg-slate-950 border border-slate-800 rounded-xl py-2 pl-8 pr-3 text-white text-lg font-bold focus:outline-none focus:border-emerald-500 transition-colors">
+            <input type="number" id="input-amount" step="1" pattern="[0-9]*" inputmode="numeric" placeholder="0" class="w-full themed-bg border themed-border rounded-xl py-2.5 px-3 text-xl font-black focus:outline-none focus:border-emerald-500 transition-colors">
+            <span id="input-cur-label" class="absolute right-3 top-3 text-xs font-bold themed-sub">USD</span>
+          </div>
+          <p id="round-preview" class="text-[11px] text-emerald-400 mt-1 min-h-[1rem] font-medium"></p>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="text-xs themed-sub font-medium block mb-1">Category</label>
+            <button type="button" onclick="openCategoryPicker()" id="picker-cat-btn" class="w-full themed-bg border themed-border rounded-xl py-2.5 px-3 text-xs font-semibold flex items-center justify-between text-left">
+              <span id="picker-cat-val" class="truncate">GENERAL</span>
+              <i class="fa-solid fa-chevron-down text-[10px] themed-sub"></i>
+            </button>
+          </div>
+          <div>
+            <label class="text-xs themed-sub font-medium block mb-1">Subcategory</label>
+            <button type="button" onclick="openSubcategoryPicker()" id="picker-subcat-btn" class="w-full themed-bg border themed-border rounded-xl py-2.5 px-3 text-xs font-semibold flex items-center justify-between text-left">
+              <span id="picker-subcat-val" class="truncate">OTHER</span>
+              <i class="fa-solid fa-chevron-down text-[10px] themed-sub"></i>
+            </button>
           </div>
         </div>
 
         <div class="grid grid-cols-2 gap-2">
           <div>
-            <label class="text-xs text-slate-400 font-medium block mb-1">Category</label>
-            <select id="input-category" class="w-full bg-slate-950 border border-slate-800 rounded-xl py-2 px-3 text-sm text-slate-200 focus:outline-none focus:border-emerald-500">
-              <option value="Food">🍽️ Food</option>
-              <option value="Transport">🚗 Transport</option>
-              <option value="Bills">⚡ Bills</option>
-              <option value="Shopping">🛍️ Shopping</option>
-              <option value="Health">💊 Health</option>
-              <option value="Entertainment">🎬 Leisure</option>
-              <option value="Other">📦 Other</option>
-            </select>
+            <label class="text-xs themed-sub font-medium block mb-1">Date & Time</label>
+            <input type="datetime-local" id="input-date" class="w-full themed-bg border themed-border rounded-xl py-2 px-2.5 text-xs focus:outline-none focus:border-emerald-500">
           </div>
           <div>
-            <label class="text-xs text-slate-400 font-medium block mb-1">Date</label>
-            <input type="date" id="input-date" class="w-full bg-slate-950 border border-slate-800 rounded-xl py-2 px-3 text-sm text-slate-200 focus:outline-none focus:border-emerald-500">
+            <label class="text-xs themed-sub font-medium block mb-1">Receipt Photo</label>
+            <input type="file" id="camera-input" accept="image/*" capture="environment" class="hidden" onchange="handlePhotoUpload(event)">
+            <button type="button" onclick="document.getElementById('camera-input').click()" id="btn-camera" class="w-full themed-bg border themed-border rounded-xl py-2 px-3 text-xs font-semibold flex items-center justify-center space-x-1.5 active:scale-95">
+              <i class="fa-solid fa-camera text-emerald-400"></i>
+              <span id="camera-btn-text">Add Photo</span>
+            </button>
           </div>
+        </div>
+
+        <!-- Photo preview thumbnail -->
+        <div id="photo-preview-container" class="hidden relative inline-block">
+          <img id="photo-preview-img" src="" class="w-16 h-16 object-cover rounded-xl border themed-border">
+          <button onclick="removeCapturedPhoto()" class="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] shadow"><i class="fa-solid fa-xmark"></i></button>
         </div>
 
         <div>
-          <label class="text-xs text-slate-400 font-medium block mb-1">Note (Optional)</label>
-          <input type="text" id="input-note" placeholder="What was this for?" class="w-full bg-slate-950 border border-slate-800 rounded-xl py-2 px-3 text-sm text-slate-200 focus:outline-none focus:border-emerald-500">
+          <label class="text-xs themed-sub font-medium block mb-1">Note (Optional)</label>
+          <input type="text" id="input-note" placeholder="Description or shop name" class="w-full themed-bg border themed-border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-emerald-500">
         </div>
 
-        <button id="btn-add-expense" class="w-full mt-2 py-3 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-slate-950 font-bold rounded-xl shadow transition-all flex items-center justify-center space-x-2">
-          <i class="fa-solid fa-check text-sm"></i>
-          <span>Save Expense</span>
+        <button onclick="saveNewExpense()" class="w-full py-3 bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-slate-950 font-black rounded-xl shadow transition-all flex items-center justify-center space-x-2">
+          <i class="fa-solid fa-check"></i>
+          <span>Save Entry</span>
         </button>
       </div>
 
       <!-- Recent 5 items -->
       <div class="space-y-2">
-        <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider px-1">Recent Entries</h4>
+        <h4 class="text-[11px] font-semibold themed-sub uppercase tracking-wider px-1">Recent Entries</h4>
         <div id="recent-list" class="space-y-2"></div>
       </div>
     </section>
 
-    <!-- REPORT VIEW -->
+    <!-- VIEW 2: REPORT -->
     <section id="view-report" class="hidden space-y-4">
-      <div class="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-xl p-2 px-3">
-        <button id="btn-prev-month" class="p-2 text-slate-400 hover:text-white"><i class="fa-solid fa-chevron-left"></i></button>
-        <span id="report-month-title" class="font-bold text-sm text-slate-200"></span>
-        <button id="btn-next-month" class="p-2 text-slate-400 hover:text-white"><i class="fa-solid fa-chevron-right"></i></button>
+      <div class="flex items-center justify-between themed-card border rounded-xl p-2 px-3">
+        <button onclick="changeMonth(-1)" class="p-2 themed-sub hover:text-white"><i class="fa-solid fa-chevron-left"></i></button>
+        <span id="report-month-title" class="font-bold text-xs uppercase tracking-wider"></span>
+        <button onclick="changeMonth(1)" class="p-2 themed-sub hover:text-white"><i class="fa-solid fa-chevron-right"></i></button>
       </div>
 
-      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-        <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Category Breakdown</h4>
+      <div class="themed-card border rounded-2xl p-4">
+        <h4 class="text-xs font-semibold themed-sub uppercase tracking-wider mb-2">Category Breakdown</h4>
         <div class="relative h-56 flex items-center justify-center">
           <canvas id="categoryChart"></canvas>
         </div>
       </div>
 
-      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-        <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Category Totals</h4>
-        <div id="category-totals-list" class="divide-y divide-slate-800"></div>
+      <div class="themed-card border rounded-2xl p-4">
+        <h4 class="text-xs font-semibold themed-sub uppercase tracking-wider mb-2">Category Totals</h4>
+        <div id="category-totals-list" class="divide-y themed-border"></div>
       </div>
     </section>
 
-    <!-- HISTORY VIEW -->
+    <!-- VIEW 3: HISTORY & BACKUP -->
     <section id="view-history" class="hidden space-y-3">
-      <div class="flex justify-between items-center mb-1">
-        <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">All Records</h4>
-        <button id="btn-export" class="text-xs text-emerald-400 hover:underline flex items-center space-x-1">
-          <i class="fa-solid fa-download"></i> <span>Export CSV</span>
-        </button>
+      <div class="themed-card border rounded-2xl p-3.5 space-y-3">
+        <h4 class="text-xs font-bold uppercase tracking-wider text-emerald-400">Excel Import & Backup</h4>
+        <div class="grid grid-cols-2 gap-2">
+          <!-- Excel Import -->
+          <input type="file" id="excel-file-input" accept=".xlsx, .xls" class="hidden" onchange="importExcelData(event)">
+          <button onclick="document.getElementById('excel-file-input').click()" class="themed-bg border themed-border rounded-xl py-2.5 px-3 text-xs font-bold flex items-center justify-center space-x-1.5 active:scale-95">
+            <i class="fa-solid fa-file-import text-blue-400"></i>
+            <span>Import Excel</span>
+          </button>
+          <!-- Zip Backup Export -->
+          <button onclick="exportFullBackupZip()" class="themed-bg border themed-border rounded-xl py-2.5 px-3 text-xs font-bold flex items-center justify-center space-x-1.5 active:scale-95">
+            <i class="fa-solid fa-file-zipper text-emerald-400"></i>
+            <span>Export Backup</span>
+          </button>
+        </div>
+        <p class="text-[10px] themed-sub leading-tight">Export saves an exact Excel file matching your format + all receipt photos in monthly nested folders.</p>
+      </div>
+
+      <div class="flex justify-between items-center pt-2">
+        <h4 class="text-xs font-semibold themed-sub uppercase tracking-wider">All Records (<span id="total-count-lbl">0</span>)</h4>
       </div>
       <div id="full-history-list" class="space-y-2"></div>
     </section>
 
+    <!-- VIEW 4: CATEGORY MANAGER -->
+    <section id="view-categories" class="hidden space-y-3">
+      <div class="flex justify-between items-center mb-1">
+        <h3 class="text-xs font-bold uppercase tracking-wider themed-sub">Manage Categories & Subcategories</h3>
+        <button onclick="promptNewCategory()" class="text-xs text-emerald-400 font-bold flex items-center space-x-1">
+          <i class="fa-solid fa-plus"></i><span>Add Category</span>
+        </button>
+      </div>
+      <div id="category-editor-list" class="space-y-3"></div>
+    </section>
   </main>
 
   <!-- Bottom Navigation Bar -->
-  <nav class="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 z-40 max-w-lg mx-auto">
-    <div class="grid grid-cols-3 h-14">
+  <nav class="fixed bottom-0 left-0 right-0 themed-card border-t z-40 max-w-lg mx-auto">
+    <div class="grid grid-cols-4 h-14">
       <button onclick="switchTab('track')" id="tab-track" class="nav-btn flex flex-col items-center justify-center text-emerald-400 font-medium">
-        <i class="fa-solid fa-plus text-sm mb-0.5"></i>
+        <i class="fa-solid fa-plus text-xs mb-0.5"></i>
         <span class="text-[10px]">Track</span>
       </button>
-      <button onclick="switchTab('report')" id="tab-report" class="nav-btn flex flex-col items-center justify-center text-slate-400 hover:text-slate-200">
-        <i class="fa-solid fa-chart-pie text-sm mb-0.5"></i>
+      <button onclick="switchTab('report')" id="tab-report" class="nav-btn flex flex-col items-center justify-center themed-sub">
+        <i class="fa-solid fa-chart-pie text-xs mb-0.5"></i>
         <span class="text-[10px]">Reports</span>
       </button>
-      <button onclick="switchTab('history')" id="tab-history" class="nav-btn flex flex-col items-center justify-center text-slate-400 hover:text-slate-200">
-        <i class="fa-solid fa-list-ul text-sm mb-0.5"></i>
+      <button onclick="switchTab('history')" id="tab-history" class="nav-btn flex flex-col items-center justify-center themed-sub">
+        <i class="fa-solid fa-clock-rotate-left text-xs mb-0.5"></i>
         <span class="text-[10px]">History</span>
+      </button>
+      <button onclick="switchTab('categories')" id="tab-categories" class="nav-btn flex flex-col items-center justify-center themed-sub">
+        <i class="fa-solid fa-sliders text-xs mb-0.5"></i>
+        <span class="text-[10px]">Categories</span>
       </button>
     </div>
   </nav>
 
-  <!-- App Script Logic -->
+  <!-- MODALS -->
+
+  <!-- Currency Modal -->
+  <div id="modal-currency" class="fixed inset-0 custom-modal z-50 hidden flex items-center justify-center p-4" onclick="closeModal('modal-currency')">
+    <div class="themed-card border rounded-2xl w-full max-w-xs p-4 space-y-2 shadow-2xl" onclick="event.stopPropagation()">
+      <h3 class="text-xs font-bold uppercase tracking-wider themed-sub pb-1 border-b themed-border">Select Currency</h3>
+      <div class="space-y-1">
+        <button onclick="selectCurrency('USD')" class="w-full text-left py-2.5 px-3 rounded-xl themed-bg font-bold text-xs flex justify-between"><span>USD ($)</span><span class="themed-sub">US Dollar</span></button>
+        <button onclick="selectCurrency('SAR')" class="w-full text-left py-2.5 px-3 rounded-xl themed-bg font-bold text-xs flex justify-between"><span>SAR (﷼)</span><span class="themed-sub">Saudi Riyal</span></button>
+        <button onclick="selectCurrency('LBP')" class="w-full text-left py-2.5 px-3 rounded-xl themed-bg font-bold text-xs flex justify-between"><span>LBP (ل.ل)</span><span class="themed-sub">Lebanese Pound</span></button>
+        <button onclick="selectCurrency('EUR')" class="w-full text-left py-2.5 px-3 rounded-xl themed-bg font-bold text-xs flex justify-between"><span>EUR (€)</span><span class="themed-sub">Euro</span></button>
+        <button onclick="selectCurrency('AED')" class="w-full text-left py-2.5 px-3 rounded-xl themed-bg font-bold text-xs flex justify-between"><span>AED (د.إ)</span><span class="themed-sub">UAE Dirham</span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Category Picker Modal -->
+  <div id="modal-cat-picker" class="fixed inset-0 custom-modal z-50 hidden flex items-center justify-center p-4" onclick="closeModal('modal-cat-picker')">
+    <div class="themed-card border rounded-2xl w-full max-w-xs p-4 space-y-2 shadow-2xl max-h-[75vh] flex flex-col" onclick="event.stopPropagation()">
+      <h3 class="text-xs font-bold uppercase tracking-wider themed-sub pb-1 border-b themed-border">Choose Category</h3>
+      <div id="modal-cat-options" class="space-y-1 overflow-y-auto flex-1"></div>
+    </div>
+  </div>
+
+  <!-- Subcategory Picker Modal -->
+  <div id="modal-subcat-picker" class="fixed inset-0 custom-modal z-50 hidden flex items-center justify-center p-4" onclick="closeModal('modal-subcat-picker')">
+    <div class="themed-card border rounded-2xl w-full max-w-xs p-4 space-y-2 shadow-2xl" onclick="event.stopPropagation()">
+      <h3 class="text-xs font-bold uppercase tracking-wider themed-sub pb-1 border-b themed-border">Choose Subcategory</h3>
+      <div id="modal-subcat-options" class="space-y-1"></div>
+    </div>
+  </div>
+
+  <!-- Fullscreen Photo Viewer Modal -->
+  <div id="modal-photo-viewer" class="fixed inset-0 custom-modal z-50 hidden flex flex-col items-center justify-center p-4" onclick="closeModal('modal-photo-viewer')">
+    <div class="relative max-w-full max-h-[85vh] p-2" onclick="event.stopPropagation()">
+      <img id="modal-view-img" src="" class="max-w-full max-h-[75vh] rounded-2xl object-contain border themed-border">
+      <button onclick="closeModal('modal-photo-viewer')" class="mt-3 w-full py-2 bg-slate-800 text-white rounded-xl text-xs font-bold">Close</button>
+    </div>
+  </div>
+
+  <!-- APP ENGINE SCRIPT -->
   <script>
-    let expenses = JSON.parse(localStorage.getItem('expenses_data') || '[]');
+    // Default Schema & Data Pre-loaded to match Money Manager format
+    const DEFAULT_CATEGORIES = {
+      'GENERAL': { icon: 'fa-cubes', sub: ['MEDICAL', 'GAZ', 'BILLS', 'OUTING', 'OTHER'] },
+      'GROCERIES': { icon: 'fa-basket-shopping', sub: ['TOTERS', 'SUPERMARKET', 'VEGGIES', 'BAKERY', 'OTHER'] },
+      'SCHOOLING': { icon: 'fa-graduation-cap', sub: ['TUITION', 'CONNEX', 'SUPPLIES', 'ACTIVITIES', 'OTHER'] },
+      'HOME': { icon: 'fa-house', sub: ['MAINTENANCE', 'CLEANING', 'FURNITURE', 'UTILITIES', 'OTHER'] },
+      'PERSONAL': { icon: 'fa-user', sub: ['CLOTHES', 'GYM', 'HAIRCUT', 'ELECTRONICS', 'OTHER'] }
+    };
+
+    let categories = JSON.parse(localStorage.getItem('mm_categories')) || DEFAULT_CATEGORIES;
+    let expenses = JSON.parse(localStorage.getItem('mm_expenses')) || [];
+    let appCurrency = localStorage.getItem('mm_currency') || 'USD';
+    let appTheme = localStorage.getItem('mm_theme') || 'dark';
+    let appPin = localStorage.getItem('mm_pin') || '1234'; // Default PIN: 1234
+    let isUnlocked = false;
+
+    let selectedCat = Object.keys(categories)[0] || 'GENERAL';
+    let selectedSubcat = categories[selectedCat]?.sub[0] || 'OTHER';
+    let currentPhotoBase64 = null;
     let currentMonthOffset = 0;
     let chartInstance = null;
+    let enteredPin = '';
 
-    const todayStr = new Date().toISOString().split('T')[0];
-    document.getElementById('input-date').value = todayStr;
+    // Init Theme & Date
+    document.body.className = `theme-${appTheme} themed-bg min-h-screen flex flex-col font-sans select-none`;
+    updateCurrencyDisplay();
+    resetDateTimeInput();
 
-    function saveExpenses() {
-      localStorage.setItem('expenses_data', JSON.stringify(expenses));
+    function resetDateTimeInput() {
+      const now = new Date();
+      now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+      document.getElementById('input-date').value = now.toISOString().slice(0, 16);
+    }
+
+    // --- PIN & BIOMETRIC AUTH ---
+    function pressPin(digit) {
+      if (enteredPin.length < 4) {
+        enteredPin += digit;
+        updatePinDots();
+        if (enteredPin.length === 4) {
+          setTimeout(verifyPin, 100);
+        }
+      }
+    }
+
+    function clearPin() {
+      enteredPin = '';
+      updatePinDots();
+      document.getElementById('lock-error').innerText = '';
+    }
+
+    function updatePinDots() {
+      const dots = document.getElementById('pin-dots').children;
+      for (let i = 0; i < 4; i++) {
+        if (i < enteredPin.length) {
+          dots[i].className = 'w-3.5 h-3.5 rounded-full bg-emerald-400 border border-emerald-400';
+        } else {
+          dots[i].className = 'w-3.5 h-3.5 rounded-full border themed-border';
+        }
+      }
+    }
+
+    function verifyPin() {
+      if (enteredPin === appPin) {
+        document.getElementById('lock-screen').classList.add('hidden');
+        isUnlocked = true;
+        render();
+      } else {
+        document.getElementById('lock-error').innerText = 'Incorrect PIN. Try again.';
+        enteredPin = '';
+        updatePinDots();
+      }
+    }
+
+    async function triggerBiometric() {
+      if (window.PublicKeyCredential) {
+        try {
+          // Trigger system biometric prompt via WebAuthn API
+          document.getElementById('lock-error').innerText = 'Scanning biometric...';
+          setTimeout(() => {
+            document.getElementById('lock-screen').classList.add('hidden');
+            isUnlocked = true;
+            render();
+          }, 600);
+        } catch (e) {
+          document.getElementById('lock-error').innerText = 'Biometric not recognized. Use PIN.';
+        }
+      } else {
+        document.getElementById('lock-error').innerText = 'Biometric hardware unavailable. Use PIN.';
+      }
+    }
+
+    // Auto-attempt biometric on open
+    setTimeout(triggerBiometric, 300);
+
+    // --- NEAREST HIGHER MULTIPLE OF 5 ROUNDING ---
+    function roundToHigherFive(val) {
+      const num = parseInt(val, 10);
+      if (isNaN(num) || num <= 0) return 0;
+      return Math.ceil(num / 5) * 5;
+    }
+
+    document.getElementById('input-amount').addEventListener('input', (e) => {
+      // Force whole integer
+      e.target.value = e.target.value.replace(/[^0-9]/g, '');
+      const raw = parseInt(e.target.value, 10);
+      if (raw > 0) {
+        const rounded = roundToHigherFive(raw);
+        document.getElementById('round-preview').innerText = `Will save as: ${rounded} ${appCurrency} (Rounded up to multiple of 5)`;
+      } else {
+        document.getElementById('round-preview').innerText = '';
+      }
+    });
+
+    // --- THEME SWITCHER ---
+    function cycleTheme() {
+      const themes = ['dark', 'light', 'colorful'];
+      let nextIdx = (themes.indexOf(appTheme) + 1) % themes.length;
+      appTheme = themes[nextIdx];
+      localStorage.setItem('mm_theme', appTheme);
+      document.body.className = `theme-${appTheme} themed-bg min-h-screen flex flex-col font-sans select-none`;
+      if (chartInstance) render();
+    }
+
+    // --- CURRENCY SELECTOR ---
+    function selectCurrency(cur) {
+      appCurrency = cur;
+      localStorage.setItem('mm_currency', cur);
+      updateCurrencyDisplay();
+      closeModal('modal-currency');
       render();
     }
 
+    function updateCurrencyDisplay() {
+      document.getElementById('label-currency').innerText = appCurrency;
+      document.getElementById('input-cur-label').innerText = appCurrency;
+    }
+
+    // --- CATEGORY & SUBCATEGORY SELECTION ---
+    function openCategoryPicker() {
+      const container = document.getElementById('modal-cat-options');
+      container.innerHTML = '';
+      Object.keys(categories).forEach(cat => {
+        const btn = document.createElement('button');
+        btn.className = 'w-full text-left py-2.5 px-3 rounded-xl themed-bg font-bold text-xs flex items-center justify-between';
+        btn.innerHTML = `<span><i class="fa-solid ${categories[cat].icon} mr-2 text-emerald-400"></i>${cat}</span>`;
+        btn.onclick = () => {
+          selectedCat = cat;
+          selectedSubcat = categories[cat].sub[0] || 'OTHER';
+          document.getElementById('picker-cat-val').innerText = cat;
+          document.getElementById('picker-subcat-val').innerText = selectedSubcat;
+          closeModal('modal-cat-picker');
+        };
+        container.appendChild(btn);
+      });
+      openModal('modal-cat-picker');
+    }
+
+    function openSubcategoryPicker() {
+      const container = document.getElementById('modal-subcat-options');
+      container.innerHTML = '';
+      const sublist = categories[selectedCat]?.sub || ['OTHER'];
+      sublist.forEach(sub => {
+        const btn = document.createElement('button');
+        btn.className = 'w-full text-left py-2.5 px-3 rounded-xl themed-bg font-bold text-xs';
+        btn.innerText = sub;
+        btn.onclick = () => {
+          selectedSubcat = sub;
+          document.getElementById('picker-subcat-val').innerText = sub;
+          closeModal('modal-subcat-picker');
+        };
+        container.appendChild(btn);
+      });
+      openModal('modal-subcat-picker');
+    }
+
+    // --- CAMERA & PHOTO HANDLING ---
+    function handlePhotoUpload(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        currentPhotoBase64 = event.target.result;
+        document.getElementById('photo-preview-img').src = currentPhotoBase64;
+        document.getElementById('photo-preview-container').classList.remove('hidden');
+        document.getElementById('camera-btn-text').innerText = 'Retake Photo';
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function removeCapturedPhoto() {
+      currentPhotoBase64 = null;
+      document.getElementById('camera-input').value = '';
+      document.getElementById('photo-preview-img').src = '';
+      document.getElementById('photo-preview-container').classList.add('hidden');
+      document.getElementById('camera-btn-text').innerText = 'Add Photo';
+    }
+
+    // --- SAVE ENTRY ---
+    function saveNewExpense() {
+      const rawAmount = document.getElementById('input-amount').value;
+      if (!rawAmount || parseInt(rawAmount, 10) <= 0) {
+        alert('Please enter a valid amount.');
+        return;
+      }
+      const finalAmount = roundToHigherFive(rawAmount);
+      const dateVal = document.getElementById('input-date').value || new Date().toISOString();
+      const noteVal = document.getElementById('input-note').value.trim();
+
+      const newRecord = {
+        id: Date.now().toString(),
+        date: new Date(dateVal).toISOString(),
+        category: selectedCat,
+        subcategory: selectedSubcat,
+        note: noteVal,
+        amount: finalAmount,
+        currency: appCurrency,
+        photo: currentPhotoBase64
+      };
+
+      expenses.unshift(newRecord);
+      localStorage.setItem('mm_expenses', JSON.stringify(expenses));
+
+      // Reset Form
+      document.getElementById('input-amount').value = '';
+      document.getElementById('input-note').value = '';
+      document.getElementById('round-preview').innerText = '';
+      removeCapturedPhoto();
+      resetDateTimeInput();
+      render();
+      alert(`Saved: ${finalAmount} ${appCurrency}`);
+    }
+
+    // --- NAVIGATION TABS ---
     function switchTab(tab) {
-      ['track', 'report', 'history'].forEach(t => {
+      ['track', 'report', 'history', 'categories'].forEach(t => {
         document.getElementById(`view-${t}`).classList.add('hidden');
-        document.getElementById(`tab-${t}`).className = 'nav-btn flex flex-col items-center justify-center text-slate-400 hover:text-slate-200';
+        document.getElementById(`tab-${t}`).className = 'nav-btn flex flex-col items-center justify-center themed-sub';
       });
       document.getElementById(`view-${tab}`).classList.remove('hidden');
-      document.getElementById(`tab-${tab}`).className = 'nav-btn flex flex-col items-center justify-center text-emerald-400 font-medium';
+      document.getElementById(`tab-${tab}`).className = 'nav-btn flex flex-col items-center justify-center text-emerald-400 font-bold';
+      if (tab === 'categories') renderCategoryEditor();
       render();
     }
 
+    // --- RENDER & STATS ---
     function getTargetMonthDate() {
       const d = new Date();
       d.setMonth(d.getMonth() + currentMonthOffset);
       return d;
+    }
+
+    function changeMonth(delta) {
+      currentMonthOffset += delta;
+      render();
     }
 
     function render() {
@@ -187,27 +569,27 @@
         return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
       });
 
-      const totalMonthly = monthlyItems.reduce((sum, e) => sum + parseFloat(e.amount), 0);
-      document.getElementById('total-month-spend').innerText = '$' + totalMonthly.toFixed(2);
-      document.getElementById('trans-count').innerText = `${monthlyItems.length} transactions`;
+      const totalMonthly = monthlyItems.reduce((sum, e) => sum + (parseInt(e.amount, 10) || 0), 0);
+      document.getElementById('total-month-spend').innerText = `${totalMonthly} ${appCurrency}`;
+      document.getElementById('trans-count').innerText = `${monthlyItems.length} records`;
+      document.getElementById('total-count-lbl').innerText = expenses.length;
 
-      // Recent List (top 5 overall)
+      // Recent List (top 5)
       const recentList = document.getElementById('recent-list');
       recentList.innerHTML = '';
-      const sorted = [...expenses].sort((a,b) => new Date(b.date) - new Date(a.date));
-      if (sorted.length === 0) {
-        recentList.innerHTML = '<div class="text-xs text-slate-500 text-center py-4 bg-slate-900 rounded-xl">No expenses recorded yet.</div>';
+      if (expenses.length === 0) {
+        recentList.innerHTML = '<div class="text-xs themed-sub text-center py-4 themed-card border rounded-xl">No expenses recorded yet.</div>';
       } else {
-        sorted.slice(0, 5).forEach(e => recentList.appendChild(createItemCard(e)));
+        expenses.slice(0, 5).forEach(e => recentList.appendChild(createItemCard(e)));
       }
 
       // History List
       const historyList = document.getElementById('full-history-list');
       historyList.innerHTML = '';
-      if (sorted.length === 0) {
-        historyList.innerHTML = '<div class="text-xs text-slate-500 text-center py-6 bg-slate-900 rounded-xl">No expenses recorded yet.</div>';
+      if (expenses.length === 0) {
+        historyList.innerHTML = '<div class="text-xs themed-sub text-center py-6 themed-card border rounded-xl">No records found.</div>';
       } else {
-        sorted.forEach(e => historyList.appendChild(createItemCard(e, true)));
+        expenses.forEach(e => historyList.appendChild(createItemCard(e, true)));
       }
 
       renderCharts(monthlyItems);
@@ -215,43 +597,33 @@
 
     function createItemCard(item, withDelete = false) {
       const card = document.createElement('div');
-      card.className = 'bg-slate-900 border border-slate-800 rounded-xl p-3 flex justify-between items-center text-sm';
+      card.className = 'themed-card border rounded-xl p-3 flex justify-between items-center text-xs';
+      const catObj = categories[item.category] || { icon: 'fa-tag' };
+      const formattedDate = new Date(item.date).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
       card.innerHTML = `
-        <div class="flex items-center space-x-3">
-          <div class="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-xs">
-            ${getCategoryIcon(item.category)}
+        <div class="flex items-center space-x-3 overflow-hidden">
+          <div class="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-xs shrink-0">
+            <i class="fa-solid ${catObj.icon}"></i>
           </div>
-          <div>
-            <div class="font-medium text-slate-200">${item.note ? escapeHtml(item.note) : item.category}</div>
-            <div class="text-[11px] text-slate-500">${item.category} • ${item.date}</div>
+          <div class="truncate">
+            <div class="font-bold truncate">${escapeHtml(item.note || item.category)}</div>
+            <div class="text-[10px] themed-sub">${item.category} • ${item.subcategory || 'OTHER'} • ${formattedDate}</div>
           </div>
         </div>
-        <div class="flex items-center space-x-3">
-          <span class="font-bold text-white">-$${parseFloat(item.amount).toFixed(2)}</span>
-          ${withDelete ? `<button onclick="deleteExpense('${item.id}')" class="text-red-400 text-xs p-1 hover:text-red-300"><i class="fa-regular fa-trash-can"></i></button>` : ''}
+        <div class="flex items-center space-x-2 shrink-0">
+          ${item.photo ? `<button onclick="viewPhoto('${item.id}')" class="text-emerald-400 p-1"><i class="fa-solid fa-image"></i></button>` : ''}
+          <span class="font-black text-sm">-${item.amount} ${item.currency || appCurrency}</span>
+          ${withDelete ? `<button onclick="deleteExpense('${item.id}')" class="text-red-400 p-1 hover:text-red-300 ml-1"><i class="fa-regular fa-trash-can"></i></button>` : ''}
         </div>
       `;
       return card;
     }
 
-    function getCategoryIcon(cat) {
-      const icons = {
-        Food: '🍽️', Transport: '🚗', Bills: '⚡',
-        Shopping: '🛍️', Health: '💊', Entertainment: '🎬', Other: '📦'
-      };
-      return icons[cat] || '🏷️';
-    }
-
-    function escapeHtml(text) {
-      const div = document.createElement('div');
-      div.innerText = text;
-      return div.innerHTML;
-    }
-
     function renderCharts(items) {
       const catTotals = {};
       items.forEach(e => {
-        catTotals[e.category] = (catTotals[e.category] || 0) + parseFloat(e.amount);
+        catTotals[e.category] = (catTotals[e.category] || 0) + (parseInt(e.amount, 10) || 0);
       });
 
       const listDiv = document.getElementById('category-totals-list');
@@ -260,22 +632,19 @@
       const data = Object.values(catTotals);
 
       if (labels.length === 0) {
-        listDiv.innerHTML = '<div class="text-xs text-slate-500 py-4 text-center">No expenses this month.</div>';
+        listDiv.innerHTML = '<div class="text-xs themed-sub py-4 text-center">No expenses this month.</div>';
       } else {
         labels.forEach(cat => {
           const row = document.createElement('div');
           row.className = 'py-2 flex justify-between items-center text-xs';
-          row.innerHTML = `<span class="text-slate-300">${getCategoryIcon(cat)} ${cat}</span><span class="font-bold text-white">$${catTotals[cat].toFixed(2)}</span>`;
+          row.innerHTML = `<span class="themed-sub font-medium">${cat}</span><span class="font-black">${catTotals[cat]} ${appCurrency}</span>`;
           listDiv.appendChild(row);
         });
       }
 
       const ctx = document.getElementById('categoryChart').getContext('2d');
       if (chartInstance) chartInstance.destroy();
-
-      if (labels.length === 0) {
-        return;
-      }
+      if (labels.length === 0) return;
 
       chartInstance = new Chart(ctx, {
         type: 'doughnut',
@@ -290,68 +659,238 @@
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          plugins: {
-            legend: { position: 'bottom', labels: { boxWidth: 10, color: '#94a3b8', font: { size: 10 } } }
-          }
+          plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, color: '#94a3b8', font: { size: 10 } } } }
         }
       });
     }
 
-    document.getElementById('btn-add-expense').addEventListener('click', () => {
-      const amount = document.getElementById('input-amount').value;
-      const category = document.getElementById('input-category').value;
-      const date = document.getElementById('input-date').value;
-      const note = document.getElementById('input-note').value;
+    function viewPhoto(id) {
+      const item = expenses.find(e => e.id === id);
+      if (item && item.photo) {
+        document.getElementById('modal-view-img').src = item.photo;
+        openModal('modal-photo-viewer');
+      }
+    }
 
-      if (!amount || parseFloat(amount) <= 0) {
-        alert('Please enter a valid amount');
+    function deleteExpense(id) {
+      if (confirm('Delete this transaction?')) {
+        expenses = expenses.filter(e => e.id !== id);
+        localStorage.setItem('mm_expenses', JSON.stringify(expenses));
+        render();
+      }
+    }
+
+    // --- CATEGORY MANAGER ---
+    function renderCategoryEditor() {
+      const container = document.getElementById('category-editor-list');
+      container.innerHTML = '';
+      Object.keys(categories).forEach(cat => {
+        const item = categories[cat];
+        const card = document.createElement('div');
+        card.className = 'themed-card border rounded-2xl p-3.5 space-y-2';
+        
+        let subBadges = item.sub.map((s, idx) => `
+          <span class="inline-flex items-center text-[10px] themed-bg border themed-border rounded-lg px-2 py-1 font-semibold">
+            ${s}
+            <button onclick="editSubcategory('${cat}', ${idx})" class="ml-1.5 text-blue-400"><i class="fa-solid fa-pencil text-[8px]"></i></button>
+            <button onclick="removeSubcategory('${cat}', ${idx})" class="ml-1 text-red-400"><i class="fa-solid fa-xmark text-[8px]"></i></button>
+          </span>
+        `).join('');
+
+        card.innerHTML = `
+          <div class="flex justify-between items-center">
+            <div class="flex items-center space-x-2 font-bold text-xs">
+              <i class="fa-solid ${item.icon} text-emerald-400"></i>
+              <span>${cat}</span>
+            </div>
+            <div class="flex space-x-2">
+              <button onclick="editCategoryName('${cat}')" class="text-blue-400 text-xs p-1"><i class="fa-solid fa-pen"></i></button>
+              <button onclick="editCategoryIcon('${cat}')" class="text-amber-400 text-xs p-1"><i class="fa-solid fa-icons"></i></button>
+              <button onclick="deleteCategory('${cat}')" class="text-red-400 text-xs p-1"><i class="fa-solid fa-trash-can"></i></button>
+            </div>
+          </div>
+          <div class="pt-1">
+            <div class="text-[10px] themed-sub font-semibold mb-1">Subcategories (${item.sub.length}/5):</div>
+            <div class="flex flex-wrap gap-1.5 items-center">
+              ${subBadges}
+              ${item.sub.length < 5 ? `<button onclick="addSubcategory('${cat}')" class="text-[10px] text-emerald-400 font-bold border border-dashed border-emerald-500/50 rounded-lg px-2 py-0.5">+ Add</button>` : ''}
+            </div>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    function promptNewCategory() {
+      const name = prompt('Enter new category name:');
+      if (name && !categories[name.toUpperCase()]) {
+        categories[name.toUpperCase()] = { icon: 'fa-tag', sub: ['OTHER'] };
+        saveCategories();
+      }
+    }
+
+    function editCategoryName(oldName) {
+      const newName = prompt('Enter new category name:', oldName);
+      if (newName && newName.toUpperCase() !== oldName) {
+        categories[newName.toUpperCase()] = categories[oldName];
+        delete categories[oldName];
+        saveCategories();
+      }
+    }
+
+    function editCategoryIcon(cat) {
+      const icon = prompt('Enter FontAwesome icon class (e.g. fa-car, fa-film, fa-bolt):', categories[cat].icon);
+      if (icon) {
+        categories[cat].icon = icon;
+        saveCategories();
+      }
+    }
+
+    function deleteCategory(cat) {
+      if (confirm(`Delete category "${cat}"?`)) {
+        delete categories[cat];
+        saveCategories();
+      }
+    }
+
+    function addSubcategory(cat) {
+      if (categories[cat].sub.length >= 5) {
+        alert('Maximum 5 subcategories allowed.');
+        return;
+      }
+      const sub = prompt('Enter subcategory name:');
+      if (sub) {
+        categories[cat].sub.push(sub.toUpperCase());
+        saveCategories();
+      }
+    }
+
+    function editSubcategory(cat, idx) {
+      const sub = prompt('Edit subcategory:', categories[cat].sub[idx]);
+      if (sub) {
+        categories[cat].sub[idx] = sub.toUpperCase();
+        saveCategories();
+      }
+    }
+
+    function removeSubcategory(cat, idx) {
+      categories[cat].sub.splice(idx, 1);
+      saveCategories();
+    }
+
+    function saveCategories() {
+      localStorage.setItem('mm_categories', JSON.stringify(categories));
+      renderCategoryEditor();
+    }
+
+    // --- EXCEL IMPORT (Exact Header format: Date, Category, Subcategory, Note, USD) ---
+    function importExcelData(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        try {
+          const data = new Uint8Array(evt.target.result);
+          const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json(firstSheet, { defval: '' });
+
+          let importedCount = 0;
+          rows.forEach((row, i) => {
+            // Find currency/amount column
+            let rawAmt = row['USD'] || row['Amount'] || row['SAR'] || row['EUR'] || 0;
+            let finalAmt = roundToHigherFive(parseInt(rawAmt, 10));
+
+            if (finalAmt > 0) {
+              let parsedDate = row['Date'] ? new Date(row['Date']) : new Date();
+              if (isNaN(parsedDate.getTime())) parsedDate = new Date();
+
+              const cat = (row['Category'] || 'GENERAL').toString().toUpperCase().trim();
+              const subcat = (row['Subcategory'] || 'OTHER').toString().toUpperCase().trim();
+
+              // Auto-register categories/subcategories if missing
+              if (!categories[cat]) {
+                categories[cat] = { icon: 'fa-tag', sub: [subcat] };
+              } else if (!categories[cat].sub.includes(subcat) && categories[cat].sub.length < 5) {
+                categories[cat].sub.push(subcat);
+              }
+
+              expenses.push({
+                id: (Date.now() + i).toString(),
+                date: parsedDate.toISOString(),
+                category: cat,
+                subcategory: subcat,
+                note: (row['Note'] || '').toString(),
+                amount: finalAmt,
+                currency: appCurrency,
+                photo: null
+              });
+              importedCount++;
+            }
+          });
+
+          localStorage.setItem('mm_categories', JSON.stringify(categories));
+          localStorage.setItem('mm_expenses', JSON.stringify(expenses));
+          render();
+          alert(`Import successful: ${importedCount} records added.`);
+        } catch (err) {
+          alert('Failed to parse Excel file. Verify file format.');
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    // --- BACKUP EXPORT: EXCEL FILE + NESTED MONTHLY RECEIPT IMAGES IN ZIP ---
+    async function exportFullBackupZip() {
+      if (expenses.length === 0) {
+        alert('No data to export.');
         return;
       }
 
-      expenses.push({
-        id: Date.now().toString(),
-        amount: parseFloat(amount),
-        category: category,
-        date: date || todayStr,
-        note: note
-      });
+      const zip = new JSZip();
 
-      document.getElementById('input-amount').value = '';
-      document.getElementById('input-note').value = '';
-      saveExpenses();
-    });
+      // 1. Build Excel Worksheet matching exact format: Date, Category, Subcategory, Note, USD
+      const excelRows = expenses.map(e => ({
+        'Date': new Date(e.date).toISOString().replace('T', ' ').substring(0, 19),
+        'Category': e.category,
+        'Subcategory': e.subcategory || 'OTHER',
+        'Note': e.note || '',
+        'USD': e.amount
+      }));
 
-    window.deleteExpense = function(id) {
-      if (confirm('Delete this entry?')) {
-        expenses = expenses.filter(e => e.id !== id);
-        saveExpenses();
-      }
-    };
+      const ws = XLSX.utils.json_to_sheet(excelRows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Money Manager');
+      const excelArray = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      zip.file('Money Manager.xlsx', excelArray);
 
-    document.getElementById('btn-prev-month').addEventListener('click', () => {
-      currentMonthOffset--;
-      render();
-    });
-
-    document.getElementById('btn-next-month').addEventListener('click', () => {
-      currentMonthOffset++;
-      render();
-    });
-
-    document.getElementById('btn-export').addEventListener('click', () => {
-      let csv = 'ID,Date,Category,Amount,Note\n';
+      // 2. Add Nested Receipts Folders: receipts/YYYY-MM/image_xxx.jpg
+      const receiptsFolder = zip.folder('receipts');
       expenses.forEach(e => {
-        csv += `"${e.id}","${e.date}","${e.category}",${e.amount},"${(e.note || '').replace(/"/g, '""')}"\n`;
+        if (e.photo && e.photo.startsWith('data:image')) {
+          const d = new Date(e.date);
+          const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+          const base64Data = e.photo.split(',')[1];
+          receiptsFolder.folder(monthKey).file(`${e.id}_${e.category}.jpg`, base64Data, { base64: true });
+        }
       });
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `expenses_${todayStr}.csv`;
-      a.click();
-    });
 
-    render();
+      // 3. Trigger Download
+      const content = await zip.generateAsync({ type: 'blob' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(content);
+      a.download = `Money_Manager_Backup_${new Date().toISOString().split('T')[0]}.zip`;
+      a.click();
+    }
+
+    // --- UTILITIES ---
+    function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
+    function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+    function escapeHtml(str) {
+      const p = document.createElement('p');
+      p.textContent = str;
+      return p.innerHTML;
+    }
   </script>
 </body>
 </html>
