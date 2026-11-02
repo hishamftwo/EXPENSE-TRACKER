@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Expense Tracker</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    body { -webkit-tap-highlight-color: transparent; }
+    .pb-safe { padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px)); }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans select-none">
+
+  <!-- Header -->
+  <header class="bg-slate-900 border-b border-slate-800 sticky top-0 z-30 px-4 py-3 flex items-center justify-between shadow-sm">
+    <div class="flex items-center space-x-2">
+      <div class="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold">
+        <i class="fa-solid fa-wallet text-sm"></i>
+      </div>
+      <h1 class="text-lg font-bold tracking-tight text-white">Expense Tracker</h1>
+    </div>
+    <div id="month-display" class="text-xs font-medium text-slate-400 bg-slate-800/80 px-2.5 py-1 rounded-full border border-slate-700"></div>
+  </header>
+
+  <!-- Main View Container -->
+  <main class="flex-1 overflow-y-auto px-4 py-4 pb-safe max-w-lg mx-auto w-full">
+    
+    <!-- TRACK VIEW -->
+    <section id="view-track" class="space-y-4">
+      <!-- Summary Card -->
+      <div class="bg-gradient-to-br from-slate-900 to-slate-800/90 border border-slate-800 rounded-2xl p-4 shadow-lg">
+        <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">This Month's Spending</p>
+        <div class="flex items-baseline justify-between mt-1">
+          <h2 id="total-month-spend" class="text-3xl font-extrabold text-white tracking-tight">$0.00</h2>
+          <span id="trans-count" class="text-xs text-slate-400">0 records</span>
+        </div>
+      </div>
+
+      <!-- Quick Entry Form -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm space-y-3">
+        <h3 class="text-sm font-semibold text-slate-200 flex items-center space-x-1.5">
+          <i class="fa-solid fa-plus-circle text-emerald-400 text-xs"></i>
+          <span>Log Expense</span>
+        </h3>
+        
+        <div>
+          <label class="text-xs text-slate-400 font-medium block mb-1">Amount</label>
+          <div class="relative">
+            <span class="absolute left-3.5 top-2.5 text-slate-500 font-bold">$</span>
+            <input type="number" id="input-amount" step="0.01" placeholder="0.00" inputmode="decimal" class="w-full bg-slate-950 border border-slate-800 rounded-xl py-2 pl-8 pr-3 text-white text-lg font-bold focus:outline-none focus:border-emerald-500 transition-colors">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="text-xs text-slate-400 font-medium block mb-1">Category</label>
+            <select id="input-category" class="w-full bg-slate-950 border border-slate-800 rounded-xl py-2 px-3 text-sm text-slate-200 focus:outline-none focus:border-emerald-500">
+              <option value="Food">🍽️ Food</option>
+              <option value="Transport">🚗 Transport</option>
+              <option value="Bills">⚡ Bills</option>
+              <option value="Shopping">🛍️ Shopping</option>
+              <option value="Health">💊 Health</option>
+              <option value="Entertainment">🎬 Leisure</option>
+              <option value="Other">📦 Other</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs text-slate-400 font-medium block mb-1">Date</label>
+            <input type="date" id="input-date" class="w-full bg-slate-950 border border-slate-800 rounded-xl py-2 px-3 text-sm text-slate-200 focus:outline-none focus:border-emerald-500">
+          </div>
+        </div>
+
+        <div>
+          <label class="text-xs text-slate-400 font-medium block mb-1">Note (Optional)</label>
+          <input type="text" id="input-note" placeholder="What was this for?" class="w-full bg-slate-950 border border-slate-800 rounded-xl py-2 px-3 text-sm text-slate-200 focus:outline-none focus:border-emerald-500">
+        </div>
+
+        <button id="btn-add-expense" class="w-full mt-2 py-3 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-slate-950 font-bold rounded-xl shadow transition-all flex items-center justify-center space-x-2">
+          <i class="fa-solid fa-check text-sm"></i>
+          <span>Save Expense</span>
+        </button>
+      </div>
+
+      <!-- Recent 5 items -->
+      <div class="space-y-2">
+        <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider px-1">Recent Entries</h4>
+        <div id="recent-list" class="space-y-2"></div>
+      </div>
+    </section>
+
+    <!-- REPORT VIEW -->
+    <section id="view-report" class="hidden space-y-4">
+      <div class="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-xl p-2 px-3">
+        <button id="btn-prev-month" class="p-2 text-slate-400 hover:text-white"><i class="fa-solid fa-chevron-left"></i></button>
+        <span id="report-month-title" class="font-bold text-sm text-slate-200"></span>
+        <button id="btn-next-month" class="p-2 text-slate-400 hover:text-white"><i class="fa-solid fa-chevron-right"></i></button>
+      </div>
+
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+        <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Category Breakdown</h4>
+        <div class="relative h-56 flex items-center justify-center">
+          <canvas id="categoryChart"></canvas>
+        </div>
+      </div>
+
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+        <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Category Totals</h4>
+        <div id="category-totals-list" class="divide-y divide-slate-800"></div>
+      </div>
+    </section>
+
+    <!-- HISTORY VIEW -->
+    <section id="view-history" class="hidden space-y-3">
+      <div class="flex justify-between items-center mb-1">
+        <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">All Records</h4>
+        <button id="btn-export" class="text-xs text-emerald-400 hover:underline flex items-center space-x-1">
+          <i class="fa-solid fa-download"></i> <span>Export CSV</span>
+        </button>
+      </div>
+      <div id="full-history-list" class="space-y-2"></div>
+    </section>
+
+  </main>
+
+  <!-- Bottom Navigation Bar -->
+  <nav class="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 z-40 max-w-lg mx-auto">
+    <div class="grid grid-cols-3 h-14">
+      <button onclick="switchTab('track')" id="tab-track" class="nav-btn flex flex-col items-center justify-center text-emerald-400 font-medium">
+        <i class="fa-solid fa-plus text-sm mb-0.5"></i>
+        <span class="text-[10px]">Track</span>
+      </button>
+      <button onclick="switchTab('report')" id="tab-report" class="nav-btn flex flex-col items-center justify-center text-slate-400 hover:text-slate-200">
+        <i class="fa-solid fa-chart-pie text-sm mb-0.5"></i>
+        <span class="text-[10px]">Reports</span>
+      </button>
+      <button onclick="switchTab('history')" id="tab-history" class="nav-btn flex flex-col items-center justify-center text-slate-400 hover:text-slate-200">
+        <i class="fa-solid fa-list-ul text-sm mb-0.5"></i>
+        <span class="text-[10px]">History</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- App Script Logic -->
+  <script>
+    let expenses = JSON.parse(localStorage.getItem('expenses_data') || '[]');
+    let currentMonthOffset = 0;
+    let chartInstance = null;
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    document.getElementById('input-date').value = todayStr;
+
+    function saveExpenses() {
+      localStorage.setItem('expenses_data', JSON.stringify(expenses));
+      render();
+    }
+
+    function switchTab(tab) {
+      ['track', 'report', 'history'].forEach(t => {
+        document.getElementById(`view-${t}`).classList.add('hidden');
+        document.getElementById(`tab-${t}`).className = 'nav-btn flex flex-col items-center justify-center text-slate-400 hover:text-slate-200';
+      });
+      document.getElementById(`view-${tab}`).classList.remove('hidden');
+      document.getElementById(`tab-${tab}`).className = 'nav-btn flex flex-col items-center justify-center text-emerald-400 font-medium';
+      render();
+    }
+
+    function getTargetMonthDate() {
+      const d = new Date();
+      d.setMonth(d.getMonth() + currentMonthOffset);
+      return d;
+    }
+
+    function render() {
+      const targetDate = getTargetMonthDate();
+      const monthStr = targetDate.toLocaleString('default', { month: 'short', year: 'numeric' });
+      document.getElementById('month-display').innerText = monthStr;
+      document.getElementById('report-month-title').innerText = monthStr;
+
+      const currentYear = targetDate.getFullYear();
+      const currentMonth = targetDate.getMonth();
+
+      const monthlyItems = expenses.filter(e => {
+        const d = new Date(e.date);
+        return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
+      });
+
+      const totalMonthly = monthlyItems.reduce((sum, e) => sum + parseFloat(e.amount), 0);
+      document.getElementById('total-month-spend').innerText = '$' + totalMonthly.toFixed(2);
+      document.getElementById('trans-count').innerText = `${monthlyItems.length} transactions`;
+
+      // Recent List (top 5 overall)
+      const recentList = document.getElementById('recent-list');
+      recentList.innerHTML = '';
+      const sorted = [...expenses].sort((a,b) => new Date(b.date) - new Date(a.date));
+      if (sorted.length === 0) {
+        recentList.innerHTML = '<div class="text-xs text-slate-500 text-center py-4 bg-slate-900 rounded-xl">No expenses recorded yet.</div>';
+      } else {
+        sorted.slice(0, 5).forEach(e => recentList.appendChild(createItemCard(e)));
+      }
+
+      // History List
+      const historyList = document.getElementById('full-history-list');
+      historyList.innerHTML = '';
+      if (sorted.length === 0) {
+        historyList.innerHTML = '<div class="text-xs text-slate-500 text-center py-6 bg-slate-900 rounded-xl">No expenses recorded yet.</div>';
+      } else {
+        sorted.forEach(e => historyList.appendChild(createItemCard(e, true)));
+      }
+
+      renderCharts(monthlyItems);
+    }
+
+    function createItemCard(item, withDelete = false) {
+      const card = document.createElement('div');
+      card.className = 'bg-slate-900 border border-slate-800 rounded-xl p-3 flex justify-between items-center text-sm';
+      card.innerHTML = `
+        <div class="flex items-center space-x-3">
+          <div class="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-xs">
+            ${getCategoryIcon(item.category)}
+          </div>
+          <div>
+            <div class="font-medium text-slate-200">${item.note ? escapeHtml(item.note) : item.category}</div>
+            <div class="text-[11px] text-slate-500">${item.category} • ${item.date}</div>
+          </div>
+        </div>
+        <div class="flex items-center space-x-3">
+          <span class="font-bold text-white">-$${parseFloat(item.amount).toFixed(2)}</span>
+          ${withDelete ? `<button onclick="deleteExpense('${item.id}')" class="text-red-400 text-xs p-1 hover:text-red-300"><i class="fa-regular fa-trash-can"></i></button>` : ''}
+        </div>
+      `;
+      return card;
+    }
+
+    function getCategoryIcon(cat) {
+      const icons = {
+        Food: '🍽️', Transport: '🚗', Bills: '⚡',
+        Shopping: '🛍️', Health: '💊', Entertainment: '🎬', Other: '📦'
+      };
+      return icons[cat] || '🏷️';
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.innerText = text;
+      return div.innerHTML;
+    }
+
+    function renderCharts(items) {
+      const catTotals = {};
+      items.forEach(e => {
+        catTotals[e.category] = (catTotals[e.category] || 0) + parseFloat(e.amount);
+      });
+
+      const listDiv = document.getElementById('category-totals-list');
+      listDiv.innerHTML = '';
+      const labels = Object.keys(catTotals);
+      const data = Object.values(catTotals);
+
+      if (labels.length === 0) {
+        listDiv.innerHTML = '<div class="text-xs text-slate-500 py-4 text-center">No expenses this month.</div>';
+      } else {
+        labels.forEach(cat => {
+          const row = document.createElement('div');
+          row.className = 'py-2 flex justify-between items-center text-xs';
+          row.innerHTML = `<span class="text-slate-300">${getCategoryIcon(cat)} ${cat}</span><span class="font-bold text-white">$${catTotals[cat].toFixed(2)}</span>`;
+          listDiv.appendChild(row);
+        });
+      }
+
+      const ctx = document.getElementById('categoryChart').getContext('2d');
+      if (chartInstance) chartInstance.destroy();
+
+      if (labels.length === 0) {
+        return;
+      }
+
+      chartInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: labels,
+          datasets: [{
+            data: data,
+            backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4', '#64748b'],
+            borderWidth: 0
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'bottom', labels: { boxWidth: 10, color: '#94a3b8', font: { size: 10 } } }
+          }
+        }
+      });
+    }
+
+    document.getElementById('btn-add-expense').addEventListener('click', () => {
+      const amount = document.getElementById('input-amount').value;
+      const category = document.getElementById('input-category').value;
+      const date = document.getElementById('input-date').value;
+      const note = document.getElementById('input-note').value;
+
+      if (!amount || parseFloat(amount) <= 0) {
+        alert('Please enter a valid amount');
+        return;
+      }
+
+      expenses.push({
+        id: Date.now().toString(),
+        amount: parseFloat(amount),
+        category: category,
+        date: date || todayStr,
+        note: note
+      });
+
+      document.getElementById('input-amount').value = '';
+      document.getElementById('input-note').value = '';
+      saveExpenses();
+    });
+
+    window.deleteExpense = function(id) {
+      if (confirm('Delete this entry?')) {
+        expenses = expenses.filter(e => e.id !== id);
+        saveExpenses();
+      }
+    };
+
+    document.getElementById('btn-prev-month').addEventListener('click', () => {
+      currentMonthOffset--;
+      render();
+    });
+
+    document.getElementById('btn-next-month').addEventListener('click', () => {
+      currentMonthOffset++;
+      render();
+    });
+
+    document.getElementById('btn-export').addEventListener('click', () => {
+      let csv = 'ID,Date,Category,Amount,Note\n';
+      expenses.forEach(e => {
+        csv += `"${e.id}","${e.date}","${e.category}",${e.amount},"${(e.note || '').replace(/"/g, '""')}"\n`;
+      });
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `expenses_${todayStr}.csv`;
+      a.click();
+    });
+
+    render();
+  </script>
+</body>
+</html>
